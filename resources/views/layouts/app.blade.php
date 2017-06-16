@@ -25,6 +25,8 @@
     </script>
 </head>
 <body >
+    <center> @include('layouts.menu')</center>
+   <center> @include('layouts.profile')</center>
     <div id="app">
         <nav class="navbar navbar-default navbar-static-top">
             <div class="container">
@@ -87,10 +89,6 @@
 
     <!-- Scripts -->
     <script src="{{asset('/js/app.js')}}"></script>
-    <script src="{{asset('/js/bootstrap.min.css')}}"></script>
-    <center>
-    @include('layouts.menu')
-    @include('layouts.profile')
-    </center>
-</body>
+    <!-- Scripts --script src="{{asset('/js/bootstrap.min.css')}}"></script>
+    </body>
 </html>
