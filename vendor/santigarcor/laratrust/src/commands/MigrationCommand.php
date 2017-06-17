@@ -49,15 +49,17 @@ class MigrationCommand extends Command
         $roleUserTable       = Config::get('laratrust.role_user_table');
         $permissionsTable    = Config::get('laratrust.permissions_table');
         $permissionRoleTable = Config::get('laratrust.permission_role_table');
+        $permissionUserTable = Config::get('laratrust.permission_user_table');
 
         $this->line('');
-        $this->info("Tables: $rolesTable, $roleUserTable, $permissionsTable, $permissionRoleTable");
+        $this->info("Tables: $rolesTable, $roleUserTable, $permissionsTable, $permissionRoleTable, $permissionUserTable");
 
         $message = $this->generateMigrationMessage(
             $rolesTable,
             $roleUserTable,
             $permissionsTable,
-            $permissionRoleTable
+            $permissionRoleTable,
+            $permissionUserTable
         );
 
         $this->comment($message);
@@ -95,24 +97,13 @@ class MigrationCommand extends Command
     /**
      * Create the migration.
      *
-     * @param  string $rolesTable
-     * @param  string $roleUserTable
-     * @param  string $permissionsTable
-     * @param  string $permissionRoleTable
      * @return bool
      */
     protected function createMigration()
     {
         $migrationPath = $this->getMigrationPath();
-
-        $userModel   = Config::get('auth.providers.users.model');
-        $user = new $userModel;
         $laratrust = Config::get('laratrust');
-
-        $data = compact(
-            'user',
-            'laratrust'
-        );
+        $data = compact('laratrust');
 
         $output = $this->laravel->view->make('laratrust::generators.migration')->with($data)->render();
 
@@ -134,11 +125,17 @@ class MigrationCommand extends Command
      * @param  string $roleUserTable
      * @param  string $permissionsTable
      * @param  string $permissionRoleTable
+     * @param  string $permissionUserTable
      * @return string
      */
-    protected function generateMigrationMessage($rolesTable, $roleUserTable, $permissionsTable, $permissionRoleTable)
-    {
-        return "A migration that creates '$rolesTable', '$roleUserTable', '$permissionsTable', '$permissionRoleTable'".
+    protected function generateMigrationMessage(
+        $rolesTable,
+        $roleUserTable,
+        $permissionsTable,
+        $permissionRoleTable,
+        $permissionUserTable
+    ) {
+        return "A migration that creates '$rolesTable', '$roleUserTable', '$permissionsTable', '$permissionRoleTable', '$permissionUserTable'".
             " tables will be created in database/migrations directory";
     }
 

@@ -10,14 +10,18 @@ namespace Laratrust\Traits;
  * @package Laratrust
  */
 
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Config;
+use InvalidArgumentException;
+use Laratrust\Traits\LaratrustDynamicUserRelationsCalls;
 
 trait LaratrustRoleTrait
 {
+    use LaratrustDynamicUserRelationsCalls;
+
     /**
      * Big block of caching functionality
-     * @return Illuminate\Database\Eloquent\Collection
+     * @return \Illuminate\Database\Eloquent\Collection
      */
     public function cachedPermissions()
     {
@@ -29,14 +33,16 @@ trait LaratrustRoleTrait
     }
 
     /**
-     * Many-to-Many relations with the user model.
+     * Morph by Many relationship between the role and the one of the possible user models
      *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
+     * @param  string $relationship
+     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany
      */
-    public function users()
+    public function getMorphByUserRelation($relationship)
     {
-        return $this->belongsToMany(
-            Config::get('auth.providers.users.model'),
+        return $this->morphedByMany(
+            Config::get('laratrust.user_models')[$relationship],
+            'user',
             Config::get('laratrust.role_user_table'),
             Config::get('laratrust.role_foreign_key'),
             Config::get('laratrust.user_foreign_key')
@@ -73,7 +79,7 @@ trait LaratrustRoleTrait
         };
         
         // If the role doesn't use SoftDeletes
-        if (method_exists(Config::get('laratrust.role'), 'restored')) {
+        if (method_exists(static::class, 'restored')) {
             static::restored($flushCache);
         }
 
@@ -81,9 +87,14 @@ trait LaratrustRoleTrait
         static::saved($flushCache);
 
         static::deleting(function ($role) {
-            if (!method_exists(Config::get('laratrust.role'), 'bootSoftDeletes')) {
-                $role->users()->sync([]);
-                $role->permissions()->sync([]);
+            if (method_exists($role, 'bootSoftDeletes') && $role->forceDeleting) {
+                return true;
+            }
+
+            $role->permissions()->sync([]);
+
+            foreach (array_keys(Config::get('laratrust.user_models')) as $key) {
+                $role->$key()->sync([]);
             }
         });
     }
@@ -91,15 +102,15 @@ trait LaratrustRoleTrait
     /**
      * Checks if the role has a permission by its name.
      *
-     * @param string|array $name       Permission name or array of permission names.
-     * @param bool         $requireAll All permissions in the array are required.
+     * @param string|array $permission       Permission name or array of permission names.
+     * @param bool         $requireAll       All permissions in the array are required.
      *
      * @return bool
      */
-    public function hasPermission($name, $requireAll = false)
+    public function hasPermission($permission, $requireAll = false)
     {
-        if (is_array($name)) {
-            foreach ($name as $permissionName) {
+        if (is_array($permission)) {
+            foreach ($permission as $permissionName) {
                 $hasPermission = $this->hasPermission($permissionName);
 
                 if ($hasPermission && !$requireAll) {
@@ -115,8 +126,8 @@ trait LaratrustRoleTrait
             return $requireAll;
         }
 
-        foreach ($this->cachedPermissions() as $permission) {
-            if ($permission->name == $name) {
+        foreach ($this->cachedPermissions() as $perm) {
+            if (str_is($permission, $perm->name)) {
                 return true;
             }
         }
@@ -131,13 +142,13 @@ trait LaratrustRoleTrait
      *
      * @return array
      */
-    public function savePermissions($permissions)
+    public function syncPermissions($permissions)
     {
         // If the permissions is empty it will delete all associations
         $changes = $this->permissions()->sync($permissions);
         $this->flushCache();
 
-        return $changes;
+        return $this;
     }
 
     /**
@@ -149,15 +160,7 @@ trait LaratrustRoleTrait
      */
     public function attachPermission($permission)
     {
-        if (is_object($permission)) {
-            $permission = $permission->getKey();
-        }
-
-        if (is_array($permission)) {
-            $permission = $permission['id'];
-        }
-
-        $this->permissions()->attach($permission);
+        $this->permissions()->attach($this->getIdFor($permission));
         $this->flushCache();
 
         return $this;
@@ -172,15 +175,7 @@ trait LaratrustRoleTrait
      */
     public function detachPermission($permission)
     {
-        if (is_object($permission)) {
-            $permission = $permission->getKey();
-        }
-
-        if (is_array($permission)) {
-            $permission = $permission['id'];
-        }
-
-        $this->permissions()->detach($permission);
+        $this->permissions()->detach($this->getIdFor($permission));
         $this->flushCache();
 
         return $this;
@@ -209,8 +204,12 @@ trait LaratrustRoleTrait
      *
      * @return void
      */
-    public function detachPermissions($permissions)
+    public function detachPermissions($permissions = null)
     {
+        if (!$permissions) {
+            $permissions = $this->permissions()->get();
+        }
+
         foreach ($permissions as $permission) {
             $this->detachPermission($permission);
         }
@@ -225,5 +224,24 @@ trait LaratrustRoleTrait
     public function flushCache()
     {
         Cache::forget('laratrust_permissions_for_role_' . $this->getKey());
+    }
+
+    /**
+     * @param $permission
+     * @return mixed
+     */
+    private function getIdFor($permission)
+    {
+        if (is_object($permission)) {
+            return $permission->getKey();
+        } elseif (is_numeric($permission)) {
+            return $permission;
+        } elseif (is_array($permission)) {
+            return $permission['id'];
+        }
+
+        throw new InvalidArgumentException(
+            'getIdFor function only accepts an integer, a Model object or an array with an "id" key'
+        );
     }
 }
